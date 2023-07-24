@@ -42,10 +42,13 @@ private:
 	vtkSmartPointer<vtkGenericRenderWindowInteractor> interactor;
 	vtkSmartPointer<vtkInteractorStyleTrackballCamera> interactorStyle;
 	vtkSmartPointer<vtkRenderer> renderer;
+	vtkSmartPointer<vtkRenderer> outlineRenderer;
 private:
 	unsigned int viewportWidth, viewportHeight;
 	unsigned int tex;
+	double lastPosX=0.0f, lastPosY=0.0f;
 	bool firstRender;
+	bool renderPreFrame = false;
 public:
 	VtkViewer();
 	VtkViewer(const VtkViewer& vtkViewer);
@@ -82,6 +85,10 @@ public:
 	inline void setRenderer(const vtkSmartPointer<vtkRenderer>& renderer) {
 		this->renderer = renderer;
 	}
+
+	inline void setRenderPreFrame(bool renderPreFrame) {
+		this->renderPreFrame = renderPreFrame;
+	}
 public:
 	inline vtkSmartPointer<vtkGenericOpenGLRenderWindow>& getRenderWindow() {
 		return renderWindow;
@@ -97,6 +104,10 @@ public:
 
 	inline vtkSmartPointer<vtkRenderer>& getRenderer() {
 		return renderer;
+	}
+
+	inline vtkSmartPointer<vtkRenderer>& getOutlineRenderer() {
+		return outlineRenderer;
 	}
 public:
 

@@ -77,6 +77,18 @@ int main(int argc, char* argv[])
   // Setup Dear ImGui style
   ImGui::StyleColorsDark();
 
+  //Set Font
+  float dpiScaleX = 1.0, dpiScaleY = 1.0;
+  auto monitor = glfwGetPrimaryMonitor();
+  glfwGetMonitorContentScale(monitor, &dpiScaleX, &dpiScaleY);
+  std::cout << "dpiScaleX: " << dpiScaleX << std::endl;
+  io.FontGlobalScale = 1 / dpiScaleX;
+  io.DisplayFramebufferScale = ImVec2(dpiScaleX, dpiScaleY);
+  ImFontConfig fontConfig;
+  fontConfig.SizePixels = 15.0f * dpiScaleX;
+  io.Fonts->AddFontDefault(&fontConfig);
+  io.Fonts->Build();
+
   // Setup Platform/Renderer backends
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);

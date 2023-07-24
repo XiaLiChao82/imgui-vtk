@@ -1,4 +1,6 @@
 #include "VtkViewer.h"
+#include <vtkOutlineGlowPass.h>
+#include <vtkRenderStepsPass.h>
 
 // dear imgui: Renderer for VTK(OpenGL back end)
 // - Desktop GL: 2.x 3.x 4.x
@@ -46,13 +48,20 @@ void VtkViewer::processEvents(){
 
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigWindowsMoveFromTitleBarOnly = true; // don't drag window when clicking on image.
-	ImVec2 viewportPos = ImGui::GetCursorStartPos();
+	ImVec2 viewportPos = ImGui::GetItemRectMin();
 
 	double xpos = static_cast<double>(io.MousePos[0]) - static_cast<double>(viewportPos.x);
 	double ypos = static_cast<double>(io.MousePos[1]) - static_cast<double>(viewportPos.y);
 	int ctrl = static_cast<int>(io.KeyCtrl);
 	int shift = static_cast<int>(io.KeyShift);
 	bool dclick = io.MouseDoubleClicked[0] || io.MouseDoubleClicked[1] || io.MouseDoubleClicked[2];
+
+	float dpiScaleX=1.0, dpiScaleY=1.0;
+	auto monitor = glfwGetPrimaryMonitor();
+	glfwGetMonitorContentScale(monitor, &dpiScaleX, &dpiScaleY);
+	
+	xpos *= dpiScaleX;
+	ypos *= dpiScaleY;
 
 	interactor->SetEventInformationFlipY(xpos, ypos, ctrl, shift, dclick);
 
@@ -79,7 +88,11 @@ void VtkViewer::processEvents(){
 		interactor->InvokeEvent(vtkCommand::RightButtonReleaseEvent, nullptr);
 	}
 
-	interactor->InvokeEvent(vtkCommand::MouseMoveEvent, nullptr);
+	if(std::fabs(lastPosX - xpos) > 0.0f || std::fabs(lastPosY - ypos) > 0.0f){
+		interactor->InvokeEvent(vtkCommand::MouseMoveEvent, nullptr);
+	}
+	lastPosX = xpos;
+	lastPosY = ypos;
 }
 
 VtkViewer::VtkViewer() 
@@ -128,12 +141,20 @@ void VtkViewer::init(){
 	renderer->SetBackground(DEFAULT_BACKGROUND);
 	renderer->SetBackgroundAlpha(DEFAULT_ALPHA);
 
+	outlineRenderer = vtkSmartPointer<vtkRenderer>::New();
+	vtkNew<vtkRenderStepsPass> basePass;
+	vtkNew<vtkOutlineGlowPass> outlinePass;
+	outlinePass->SetDelegatePass(basePass);
+	outlineRenderer->SetActiveCamera(renderer->GetActiveCamera());
+	outlineRenderer->SetLayer(1);
+	outlineRenderer->SetPass(outlinePass);
+
 	interactorStyle = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
 	interactorStyle->SetDefaultRenderer(renderer);
 
 	interactor = vtkSmartPointer<vtkGenericRenderWindowInteractor>::New();
 	interactor->SetInteractorStyle(interactorStyle);
-	interactor->EnableRenderOff();
+	interactor->SetEnableRender(!renderPreFrame);
 
 	int viewportSize[2] = {static_cast<int>(viewportWidth), static_cast<int>(viewportHeight)};
 
@@ -147,8 +168,10 @@ void VtkViewer::init(){
 	renderWindow->SwapBuffersOn();
 
 	renderWindow->SetOffScreenRendering(true);
-	renderWindow->SetFrameBlitModeToNoBlit();
+	renderWindow->SetFrameBlitModeToBlitToCurrent();
 
+	renderWindow->SetNumberOfLayers(2);
+	renderWindow->AddRenderer(outlineRenderer);
 	renderWindow->AddRenderer(renderer);
 	renderWindow->SetInteractor(interactor);
 
@@ -161,10 +184,14 @@ void VtkViewer::render(){
 	render(ImGui::GetContentRegionAvail());
 }
 void VtkViewer::render(const ImVec2 size){
-	setViewportSize(size);
+	auto monitor = glfwGetPrimaryMonitor();
+	float dpiScaleX=1.0, dpiScaleY=1.0;
+	glfwGetMonitorContentScale(monitor, &dpiScaleX, &dpiScaleY);
+	ImVec2 scaleSize = ImVec2(size.x * dpiScaleX, size.y * dpiScaleY);
+	setViewportSize(scaleSize);
 
-	renderWindow->Render();
-	renderWindow->WaitForCompletion();
+	if(renderPreFrame)
+		renderWindow->Render();
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
 	ImGui::BeginChild("##Viewport", size, true, VtkViewer::NoScrollFlags());
@@ -212,7 +239,8 @@ void VtkViewer::setViewportSize(const ImVec2 newSize){
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, viewportWidth, viewportHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+	//!Fix vtkOutlineGlowPass display bug [solution: change internalFormat from GL_RGBA to GL_RGB]
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, viewportWidth, viewportHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -225,6 +253,8 @@ void VtkViewer::setViewportSize(const ImVec2 newSize){
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
 	vtkfbo->UnBind();
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	firstRender = false;
+
+	if(!renderPreFrame)
+		renderWindow->Render();
 }

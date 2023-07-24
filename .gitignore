@@ -4,5 +4,5 @@ build/
 *.json
 .DS_Store
 .vscode/
-
+.cache
 imgui.ini
